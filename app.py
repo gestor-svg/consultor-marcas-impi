@@ -39,10 +39,8 @@ def analizar_con_gemini(marca, descripcion):
     try:
         # Probar diferentes modelos en orden de preferencia
         modelos_a_probar = [
-            'gemini-2.0-flash',      # Más reciente y rápido
-            'gemini-2.5-flash',      # Alternativa reciente
-            'gemini-1.5-flash',      # Modelo anterior
-            'gemini-pro'             # Fallback clásico
+            'gemini-2.5-flash',      # Parece funcionar mejor
+            'gemini-2.0-flash',      # Alternativa
         ]
         
         prompt = f"""Analiza la marca comercial '{marca}' para el giro de negocio '{descripcion}' en México.
@@ -86,6 +84,14 @@ Instrucciones:
                         if '{' in part and '}' in part:
                             text = part.replace("json", "").replace("JSON", "").strip()
                             break
+                
+                # Limpiar caracteres problemáticos
+                text = text.replace('\n', ' ').replace('\r', '')
+                
+                # Si el JSON está incompleto, buscar solo la parte válida
+                if text.count('{') > text.count('}'):
+                    # JSON truncado, intentar cerrar
+                    text = text + '}'
                 
                 # Intentar parsear
                 resultado = json.loads(text)
