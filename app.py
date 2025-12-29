@@ -9,23 +9,28 @@ import time
 
 app = Flask(__name__)
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE GEMINI ---
 API_KEY = os.environ.get("API_KEY_GEMINI")
-genai.configure(api_key=API_KEY)
+if API_KEY:
+    genai.configure(api_key=API_KEY, transport='rest')
+else:
+    print("ADVERTENCIA: API_KEY_GEMINI no configurada")
 
 # Cache para evitar consultas repetidas
 @lru_cache(maxsize=100)
-@lru_cache(maxsize=100)
 def analizar_con_gemini(marca, descripcion):
     """Análisis de viabilidad con Gemini AI"""
+    if not API_KEY:
+        return {
+            "viabilidad": 50,
+            "clases": ["Configuración pendiente"],
+            "nota": "API Key de Gemini no configurada. Consulta manual requerida.",
+            "recomendaciones": ["Configurar API_KEY_GEMINI en variables de entorno"]
+        }
+    
     try:
-        # Intentar con diferentes versiones del modelo
-        modelos = [
-            'gemini-1.5-flash-002',
-            'gemini-1.5-flash-latest', 
-            'gemini-1.5-flash',
-            'gemini-pro'
-        ]
+        # Usar el modelo correcto con la configuración actualizada
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
         
         prompt = f"""Analiza la marca '{marca}' para el giro '{descripcion}' en México.
         
@@ -37,32 +42,43 @@ Responde ÚNICAMENTE con un objeto JSON válido (sin markdown) con esta estructu
   "recomendaciones": ["consejo 1", "consejo 2"]
 }}"""
         
-        for modelo_nombre in modelos:
-            try:
-                model = genai.GenerativeModel(modelo_nombre)
-                response = model.generate_content(prompt)
-                text = response.text.strip()
-                
-                # Limpiar markdown si existe
-                if "```" in text:
-                    text = text.split("```")[1]
-                    text = text.replace("json", "").strip()
-                
-                return json.loads(text)
-            except Exception as e:
-                print(f"Fallo con modelo {modelo_nombre}: {e}")
-                continue
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                'temperature': 0.7,
+                'max_output_tokens': 1024,
+            }
+        )
         
-        # Si todos fallan
-        raise Exception("Todos los modelos fallaron")
+        text = response.text.strip()
         
+        # Limpiar markdown si existe
+        if "```" in text:
+            lines = text.split("```")
+            for line in lines:
+                if '{' in line and '}' in line:
+                    text = line.replace("json", "").strip()
+                    break
+        
+        result = json.loads(text)
+        return result
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parseando JSON de Gemini: {e}")
+        print(f"Texto recibido: {text[:200]}")
+        return {
+            "viabilidad": 40,
+            "clases": ["Clase 35: Servicios comerciales (por determinar)"],
+            "nota": "Análisis preliminar. Se recomienda consulta detallada.",
+            "recomendaciones": ["Verificar clasificación exacta con especialista"]
+        }
     except Exception as e:
         print(f"Error en Gemini: {e}")
         return {
             "viabilidad": 40,
             "clases": ["Consulta manual requerida"],
-            "nota": "No se pudo completar el análisis automático.",
-            "recomendaciones": ["Consultar con un abogado especializado"]
+            "nota": "No se pudo completar el análisis automático por error técnico.",
+            "recomendaciones": ["Consultar con un abogado especializado en propiedad industrial"]
         }
 
 def buscar_en_marcanet_http(marca):
