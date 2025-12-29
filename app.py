@@ -15,11 +15,20 @@ genai.configure(api_key=API_KEY)
 
 # Cache para evitar consultas repetidas
 @lru_cache(maxsize=100)
+@lru_cache(maxsize=100)
 def analizar_con_gemini(marca, descripcion):
     """Análisis de viabilidad con Gemini AI"""
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = f"""Analiza la marca '{marca}' para el giro '{descripcion}' en México.
-    
+    try:
+        # Intentar con diferentes versiones del modelo
+        modelos = [
+            'gemini-1.5-flash-002',
+            'gemini-1.5-flash-latest', 
+            'gemini-1.5-flash',
+            'gemini-pro'
+        ]
+        
+        prompt = f"""Analiza la marca '{marca}' para el giro '{descripcion}' en México.
+        
 Responde ÚNICAMENTE con un objeto JSON válido (sin markdown) con esta estructura:
 {{
   "viabilidad": <número 0-100>,
@@ -27,17 +36,26 @@ Responde ÚNICAMENTE con un objeto JSON válido (sin markdown) con esta estructu
   "nota": "texto explicativo",
   "recomendaciones": ["consejo 1", "consejo 2"]
 }}"""
-    
-    try:
-        response = model.generate_content(prompt)
-        text = response.text.strip()
         
-        # Limpiar markdown si existe
-        if "```" in text:
-            text = text.split("```")[1]
-            text = text.replace("json", "").strip()
+        for modelo_nombre in modelos:
+            try:
+                model = genai.GenerativeModel(modelo_nombre)
+                response = model.generate_content(prompt)
+                text = response.text.strip()
+                
+                # Limpiar markdown si existe
+                if "```" in text:
+                    text = text.split("```")[1]
+                    text = text.replace("json", "").strip()
+                
+                return json.loads(text)
+            except Exception as e:
+                print(f"Fallo con modelo {modelo_nombre}: {e}")
+                continue
         
-        return json.loads(text)
+        # Si todos fallan
+        raise Exception("Todos los modelos fallaron")
+        
     except Exception as e:
         print(f"Error en Gemini: {e}")
         return {
