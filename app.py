@@ -12,7 +12,7 @@ app = Flask(__name__)
 # --- CONFIGURACIÓN DE GEMINI ---
 API_KEY = os.environ.get("API_KEY_GEMINI")
 if API_KEY:
-    genai.configure(api_key=API_KEY, transport='rest')
+    genai.configure(api_key=API_KEY)
 else:
     print("ADVERTENCIA: API_KEY_GEMINI no configurada")
 
@@ -24,53 +24,51 @@ def analizar_con_gemini(marca, descripcion):
         return {
             "viabilidad": 50,
             "clases": ["Configuración pendiente"],
-            "nota": "API Key de Gemini no configurada. Consulta manual requerida.",
-            "recomendaciones": ["Configurar API_KEY_GEMINI en variables de entorno"]
+            "nota": "API Key de Gemini no configurada.",
+            "recomendaciones": ["Configurar API_KEY_GEMINI"]
         }
     
     try:
-        # Usar el modelo correcto con la configuración actualizada
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        # IMPORTANTE: No incluir "models/" en el nombre
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""Analiza la marca '{marca}' para el giro '{descripcion}' en México.
-        
-Responde ÚNICAMENTE con un objeto JSON válido (sin markdown) con esta estructura:
+
+Responde ÚNICAMENTE con JSON válido (sin markdown):
 {{
-  "viabilidad": <número 0-100>,
-  "clases": ["Clase X: descripción", "Clase Y: descripción"],
-  "nota": "texto explicativo",
-  "recomendaciones": ["consejo 1", "consejo 2"]
+  "viabilidad": 75,
+  "clases": ["Clase 35: Servicios comerciales", "Clase 42: Servicios tecnológicos"],
+  "nota": "Análisis de viabilidad",
+  "recomendaciones": ["Consultar especialista", "Verificar clases específicas"]
 }}"""
         
         response = model.generate_content(
             prompt,
-            generation_config={
-                'temperature': 0.7,
-                'max_output_tokens': 1024,
-            }
+            generation_config=genai.GenerationConfig(
+                temperature=0.7,
+                max_output_tokens=1024,
+            )
         )
         
         text = response.text.strip()
         
-        # Limpiar markdown si existe
+        # Limpiar markdown
         if "```" in text:
-            lines = text.split("```")
-            for line in lines:
-                if '{' in line and '}' in line:
-                    text = line.replace("json", "").strip()
+            parts = text.split("```")
+            for part in parts:
+                if '{' in part and '}' in part:
+                    text = part.replace("json", "").strip()
                     break
         
-        result = json.loads(text)
-        return result
+        return json.loads(text)
         
-    except json.JSONDecodeError as e:
-        print(f"Error parseando JSON de Gemini: {e}")
-        print(f"Texto recibido: {text[:200]}")
+    except Exception as e:
+        print(f"Error en Gemini: {e}")
         return {
-            "viabilidad": 40,
-            "clases": ["Clase 35: Servicios comerciales (por determinar)"],
-            "nota": "Análisis preliminar. Se recomienda consulta detallada.",
-            "recomendaciones": ["Verificar clasificación exacta con especialista"]
+            "viabilidad": 50,
+            "clases": ["Consulta manual requerida"],
+            "nota": "Error en análisis automático. Verifica con especialista.",
+            "recomendaciones": ["Consultar con abogado especializado"]
         }
     except Exception as e:
         print(f"Error en Gemini: {e}")
