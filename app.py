@@ -2,7 +2,6 @@ import os
 import requests
 from flask import Flask, render_template, request, jsonify
 from bs4 import BeautifulSoup
-import google.generativeai as genai
 import json
 from functools import lru_cache
 import time
@@ -11,79 +10,110 @@ app = Flask(__name__)
 
 # --- CONFIGURACIÓN DE GEMINI ---
 API_KEY = os.environ.get("API_KEY_GEMINI")
-if API_KEY:
-    genai.configure(api_key=API_KEY)
-else:
-    print("ADVERTENCIA: API_KEY_GEMINI no configurada")
 
-# Cache para evitar consultas repetidas
+# Solo importar y configurar si la API key existe
+GEMINI_AVAILABLE = False
+if API_KEY:
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=API_KEY)
+        GEMINI_AVAILABLE = True
+        print("✓ Gemini configurado correctamente")
+    except Exception as e:
+        print(f"⚠ Error configurando Gemini: {e}")
+        GEMINI_AVAILABLE = False
+else:
+    print("⚠ API_KEY_GEMINI no encontrada - funcionando sin IA")
+
 @lru_cache(maxsize=100)
 def analizar_con_gemini(marca, descripcion):
     """Análisis de viabilidad con Gemini AI"""
-    if not API_KEY:
+    if not GEMINI_AVAILABLE:
         return {
             "viabilidad": 50,
-            "clases": ["Configuración pendiente"],
-            "nota": "API Key de Gemini no configurada.",
-            "recomendaciones": ["Configurar API_KEY_GEMINI"]
+            "clases": ["IA no disponible - Consulta manual requerida"],
+            "nota": "El análisis de IA no está disponible. Verifica la configuración de API Key.",
+            "recomendaciones": ["Consultar con un abogado especializado en propiedad industrial"]
         }
     
     try:
-        # IMPORTANTE: No incluir "models/" en el nombre
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Probar diferentes modelos en orden de preferencia
+        modelos_a_probar = [
+            'gemini-2.0-flash',      # Más reciente y rápido
+            'gemini-2.5-flash',      # Alternativa reciente
+            'gemini-1.5-flash',      # Modelo anterior
+            'gemini-pro'             # Fallback clásico
+        ]
         
-        prompt = f"""Analiza la marca '{marca}' para el giro '{descripcion}' en México.
+        prompt = f"""Analiza la marca comercial '{marca}' para el giro de negocio '{descripcion}' en México.
 
-Responde ÚNICAMENTE con JSON válido (sin markdown):
+Responde ÚNICAMENTE con un objeto JSON válido (sin bloques de código markdown) con exactamente esta estructura:
 {{
   "viabilidad": 75,
-  "clases": ["Clase 35: Servicios comerciales", "Clase 42: Servicios tecnológicos"],
-  "nota": "Análisis de viabilidad",
-  "recomendaciones": ["Consultar especialista", "Verificar clases específicas"]
-}}"""
+  "clases": ["Clase 35: Servicios de publicidad y gestión comercial", "Clase 42: Servicios científicos y tecnológicos"],
+  "nota": "Análisis de viabilidad de la marca",
+  "recomendaciones": ["Verificar disponibilidad en clases específicas", "Consultar con especialista"]
+}}
+
+Instrucciones:
+- viabilidad: número del 0 al 100
+- clases: array con 2-4 clases del Clasificador de Niza relevantes
+- nota: texto breve sobre la marca
+- recomendaciones: array con 2-4 consejos prácticos"""
         
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=1024,
-            )
-        )
+        ultimo_error = None
         
-        text = response.text.strip()
+        for modelo_nombre in modelos_a_probar:
+            try:
+                print(f"[DEBUG] Intentando modelo: {modelo_nombre}")
+                model = genai.GenerativeModel(modelo_nombre)
+                
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.7,
+                        max_output_tokens=1024,
+                    )
+                )
+                
+                text = response.text.strip()
+                print(f"[DEBUG] Respuesta recibida ({len(text)} caracteres)")
+                
+                # Limpiar markdown si existe
+                if "```" in text:
+                    parts = text.split("```")
+                    for part in parts:
+                        if '{' in part and '}' in part:
+                            text = part.replace("json", "").replace("JSON", "").strip()
+                            break
+                
+                # Intentar parsear
+                resultado = json.loads(text)
+                print(f"[DEBUG] ✓ Modelo {modelo_nombre} funcionó correctamente")
+                return resultado
+                
+            except Exception as e:
+                ultimo_error = str(e)
+                print(f"[DEBUG] ✗ Modelo {modelo_nombre} falló: {e}")
+                continue
         
-        # Limpiar markdown
-        if "```" in text:
-            parts = text.split("```")
-            for part in parts:
-                if '{' in part and '}' in part:
-                    text = part.replace("json", "").strip()
-                    break
-        
-        return json.loads(text)
+        # Si todos los modelos fallaron
+        raise Exception(f"Todos los modelos fallaron. Último error: {ultimo_error}")
         
     except Exception as e:
-        print(f"Error en Gemini: {e}")
+        print(f"[ERROR] Error en Gemini: {e}")
         return {
             "viabilidad": 50,
-            "clases": ["Consulta manual requerida"],
-            "nota": "Error en análisis automático. Verifica con especialista.",
-            "recomendaciones": ["Consultar con abogado especializado"]
-        }
-    except Exception as e:
-        print(f"Error en Gemini: {e}")
-        return {
-            "viabilidad": 40,
-            "clases": ["Consulta manual requerida"],
-            "nota": "No se pudo completar el análisis automático por error técnico.",
-            "recomendaciones": ["Consultar con un abogado especializado en propiedad industrial"]
+            "clases": ["Análisis automático no disponible"],
+            "nota": "No se pudo completar el análisis con IA. Se recomienda consulta manual.",
+            "recomendaciones": [
+                "Consultar con un abogado especializado en propiedad industrial",
+                "Verificar manualmente en https://marcanet.impi.gob.mx"
+            ]
         }
 
 def buscar_en_marcanet_http(marca):
-    """
-    Búsqueda usando requests en lugar de Selenium
-    Más rápido, ligero y confiable
-    """
+    """Búsqueda usando requests - Método principal"""
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -93,76 +123,50 @@ def buscar_en_marcanet_http(marca):
     })
     
     try:
-        # 1. Obtener la página de búsqueda para cookies/sesión
+        print(f"[DEBUG] Buscando marca en IMPI: {marca}")
+        
         url_base = "https://acervomarcas.impi.gob.mx:8181/marcanet/vistas/common/datos/bsqDenominacionCompleto.pgi"
         response = session.get(url_base, timeout=15)
         
         if response.status_code != 200:
             return "ERROR_CONEXION"
         
-        # 2. Preparar datos del formulario
-        # Nota: Estos nombres pueden cambiar, habría que inspeccionar el HTML real
         data = {
             'denominacion': marca,
-            'tipo_busqueda': 'EXACTA',  # o 'FONÉTICA' según necesites
+            'tipo_busqueda': 'EXACTA',
             'vigentes': 'true'
         }
         
-        # 3. Enviar búsqueda (método POST)
         url_busqueda = "https://acervomarcas.impi.gob.mx:8181/marcanet/controlers/ctBusqueda.php"
         response = session.post(url_busqueda, data=data, timeout=20)
         
-        # 4. Analizar resultados
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Buscar indicadores de resultados
         no_resultados = [
             "No se encontraron registros",
             "sin resultados",
-            "0 resultados"
+            "0 resultados",
+            "no se encontró"
         ]
         
         texto_respuesta = response.text.lower()
         
         if any(msg.lower() in texto_respuesta for msg in no_resultados):
+            print(f"[DEBUG] ✓ Marca DISPONIBLE")
             return "DISPONIBLE"
         
-        # Si hay tabla de resultados o registros
-        if soup.find('table') or 'expediente' in texto_respuesta:
+        if soup.find('table') or 'expediente' in texto_respuesta or 'solicitud' in texto_respuesta:
+            print(f"[DEBUG] ✗ Marca OCUPADA")
             return "OCUPADA"
         
-        # Si no estamos seguros
+        print(f"[DEBUG] ? Resultado incierto")
         return "VERIFICAR_MANUAL"
         
     except requests.Timeout:
-        print("Timeout al consultar IMPI")
+        print("[ERROR] Timeout al consultar IMPI")
         return "ERROR_TIMEOUT"
-    except requests.RequestException as e:
-        print(f"Error de conexión: {e}")
-        return "ERROR_CONEXION"
     except Exception as e:
-        print(f"Error inesperado: {e}")
-        return "ERROR_DESCONOCIDO"
-
-def buscar_marca_fallback(marca):
-    """
-    Método alternativo: Buscar en el buscador público simplificado
-    """
-    try:
-        # URL alternativa del IMPI (puede variar)
-        url = f"https://siga.impi.gob.mx/newSIGA/content/common/principal.jsf"
-        
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        
-        # Aquí irían las peticiones específicas según la estructura del sitio
-        # Por ahora retornamos que requiere verificación manual
-        return "VERIFICAR_MANUAL"
-        
-    except Exception as e:
-        print(f"Error en fallback: {e}")
+        print(f"[ERROR] Error en IMPI: {e}")
         return "ERROR_CONEXION"
 
 @app.route('/')
@@ -176,51 +180,62 @@ def consultar():
     desc = data.get('descripcion', '').strip()
     
     if not marca or not desc:
-        return jsonify({
-            "error": "Marca y descripción son obligatorias"
-        }), 400
+        return jsonify({"error": "Marca y descripción son obligatorias"}), 400
     
-    # Normalizar marca
     marca = marca.upper()
     
-    # 1. Análisis con IA (rápido)
+    print(f"\n{'='*60}")
+    print(f"CONSULTA: {marca}")
+    print(f"{'='*60}")
+    
+    # 1. Análisis con IA (o fallback si no está disponible)
     resultado = analizar_con_gemini(marca, desc)
     
-    # 2. Búsqueda en IMPI (más lento)
+    # 2. Búsqueda en IMPI
     disponibilidad = buscar_en_marcanet_http(marca)
-    
-    # Si falla el método principal, intentar fallback
-    if disponibilidad.startswith("ERROR"):
-        time.sleep(2)
-        disponibilidad = buscar_marca_fallback(marca)
-    
-    # 3. Lógica de cruce
     resultado['status_impi'] = disponibilidad
     
+    # 3. Ajustar según resultado IMPI
     if disponibilidad == "OCUPADA":
         resultado['viabilidad'] = 5
-        resultado['nota'] = "⚠️ ALERTA CRÍTICA: Esta marca ya está registrada en el IMPI. Su uso podría resultar en infracciones legales."
+        resultado['nota'] = f"⚠️ ALERTA CRÍTICA: La marca '{marca}' ya está registrada en el IMPI. Su uso sin autorización podría resultar en infracciones legales."
         resultado['recomendaciones'] = [
-            "Considerar una variación de la marca",
-            "Consultar con un abogado especializado en propiedad industrial",
-            "Verificar si la marca está vigente o abandonada"
+            "Elegir un nombre de marca diferente",
+            "Verificar si el registro está vigente o abandonado",
+            "Consultar si está en clases diferentes a tu giro"
         ]
     elif disponibilidad == "DISPONIBLE":
-        resultado['nota'] = f"✅ Marca aparentemente disponible. {resultado.get('nota', '')}"
-    elif disponibilidad == "VERIFICAR_MANUAL":
-        resultado['viabilidad'] = max(resultado.get('viabilidad', 50) - 20, 20)
-        resultado['nota'] = "⚠️ Se requiere verificación manual en el IMPI. El sistema automático no pudo confirmar disponibilidad."
-    else:  # ERROR_*
-        resultado['viabilidad'] = 50
-        resultado['nota'] = "⚠️ No se pudo verificar en el IMPI por problemas técnicos. Se recomienda consulta manual."
+        resultado['viabilidad'] = max(resultado.get('viabilidad', 70), 80)
+        resultado['nota'] = f"✅ Buenas noticias: '{marca}' no aparece registrada. {resultado.get('nota', '')}"
+    
+    print(f"RESULTADO: Viabilidad={resultado['viabilidad']}%, IMPI={disponibilidad}")
+    print(f"{'='*60}\n")
     
     return jsonify(resultado)
 
 @app.route('/health')
 def health():
-    """Endpoint para verificar que el servicio está vivo"""
-    return jsonify({"status": "ok", "service": "marca-checker"})
+    return jsonify({
+        "status": "ok",
+        "gemini": GEMINI_AVAILABLE,
+        "version": "3.0"
+    })
+
+@app.route('/test-impi/<marca>')
+def test_impi(marca):
+    """Endpoint de prueba para IMPI"""
+    resultado = buscar_en_marcanet_http(marca.upper())
+    return jsonify({
+        "marca": marca.upper(),
+        "status": resultado,
+        "timestamp": time.time()
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
+    print(f"\n{'='*60}")
+    print(f"🚀 Consultor de Marcas IMPI v3.0")
+    print(f"Puerto: {port}")
+    print(f"Gemini: {'✓ Habilitado' if GEMINI_AVAILABLE else '✗ Deshabilitado'}")
+    print(f"{'='*60}\n")
     app.run(host='0.0.0.0', port=port, debug=False)
