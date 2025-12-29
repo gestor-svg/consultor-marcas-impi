@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultor de Marcas IMPI | Análisis de Viabilidad</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 700px;
+            width: 100%;
+            padding: 50px 40px;
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+        }
+
+        h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loader {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .loader.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loader-text {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .resultado {
+            display: none;
+            margin-top: 30px;
+            padding: 30px;
+            border-radius: 15px;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .resultado.active {
+            display: block;
+        }
+
+        .resultado.success {
+            background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
+            border-left: 5px solid #22c55e;
+        }
+
+        .resultado.warning {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-left: 5px solid #f59e0b;
+        }
+
+        .resultado.danger {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-left: 5px solid #ef4444;
+        }
+
+        .viabilidad-score {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .score-circle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .score-circle.high {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .score-circle.medium {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .score-circle.low {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .resultado h3 {
+            color: #1a202c;
+            font-size: 20px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .nota {
+            color: #2d3748;
+            line-height: 1.7;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 8px;
+        }
+
+        .clases, .recomendaciones {
+            margin-top: 20px;
+        }
+
+        .clases h4, .recomendaciones h4 {
+            color: #1a202c;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .clases ul, .recomendaciones ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .clases li, .recomendaciones li {
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.6);
+            border-radius: 8px;
+            color: #2d3748;
+            padding-left: 35px;
+            position: relative;
+        }
+
+        .clases li:before {
+            content: "📋";
+            position: absolute;
+            left: 10px;
+        }
+
+        .recomendaciones li:before {
+            content: "💡";
+            position: absolute;
+            left: 10px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+
+        .badge-disponible {
+            background: #22c55e;
+            color: white;
+        }
+
+        .badge-ocupada {
+            background: #ef4444;
+            color: white;
+        }
+
+        .badge-verificar {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge-error {
+            background: #6b7280;
+            color: white;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #718096;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 25px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">™</div>
+            <h1>Consultor de Marcas IMPI</h1>
+            <p class="subtitle">Análisis de viabilidad impulsado por IA</p>
+        </div>
+
+        <form id="consultaForm">
+            <div class="form-group">
+                <label for="marca">Nombre de la Marca</label>
+                <input 
+                    type="text" 
+                    id="marca" 
+                    name="marca" 
+                    placeholder="Ej: INNOVATECH"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="descripcion">Giro o Actividad Comercial</label>
+                <textarea 
+                    id="descripcion" 
+                    name="descripcion" 
+                    placeholder="Describe brevemente tu negocio o producto. Ej: Software de gestión empresarial, Restaurante de comida italiana, etc."
+                    required
+                ></textarea>
+            </div>
+
+            <button type="submit" class="btn" id="btnConsultar">
+                Analizar Marca
+            </button>
+        </form>
+
+        <div class="loader" id="loader">
+            <div class="spinner"></div>
+            <p class="loader-text">Consultando IMPI y analizando con IA...</p>
+        </div>
+
+        <div class="resultado" id="resultado">
+            <div class="viabilidad-score">
+                <div class="score-circle" id="scoreCircle">
+                    <span id="scoreNumber">0</span>%
+                </div>
+            </div>
+
+            <h3>Resultado del Análisis</h3>
+            
+            <div id="statusBadge"></div>
+            
+            <div class="nota" id="nota"></div>
+
+            <div class="clases" id="clasesContainer" style="display: none;">
+                <h4>Clases Sugeridas</h4>
+                <ul id="clasesList"></ul>
+            </div>
+
+            <div class="recomendaciones" id="recomendacionesContainer" style="display: none;">
+                <h4>Recomendaciones</h4>
+                <ul id="recomendacionesList"></ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Este análisis es preliminar. Consulta con un abogado especializado antes de registrar.</p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('consultaForm');
+        const loader = document.getElementById('loader');
+        const resultado = document.getElementById('resultado');
+        const btnConsultar = document.getElementById('btnConsultar');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const marca = document.getElementById('marca').value.trim();
+            const descripcion = document.getElementById('descripcion').value.trim();
+
+            if (!marca || !descripcion) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            // Mostrar loader
+            loader.classList.add('active');
+            resultado.classList.remove('active');
+            btnConsultar.disabled = true;
+
+            try {
+                const response = await fetch('/consultar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ marca, descripcion })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    mostrarResultado(data);
+                } else {
+                    alert('Error: ' + (data.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error de conexión. Por favor intenta de nuevo.');
+                console.error(error);
+            } finally {
+                loader.classList.remove('active');
+                btnConsultar.disabled = false;
+            }
+        });
+
+        function mostrarResultado(data) {
+            // Score
+            const score = data.viabilidad || 0;
+            document.getElementById('scoreNumber').textContent = score;
+
+            const scoreCircle = document.getElementById('scoreCircle');
+            scoreCircle.className = 'score-circle';
+            
+            // Clasificación de resultado
+            resultado.className = 'resultado active';
+            
+            if (score >= 70) {
+                scoreCircle.classList.add('high');
+                resultado.classList.add('success');
+            } else if (score >= 40) {
+                scoreCircle.classList.add('medium');
+                resultado.classList.add('warning');
+            } else {
+                scoreCircle.classList.add('low');
+                resultado.classList.add('danger');
+            }
+
+            // Status IMPI
+            const status = data.status_impi || 'DESCONOCIDO';
+            let badgeHTML = '';
+            
+            if (status === 'DISPONIBLE') {
+                badgeHTML = '<span class="status-badge badge-disponible">✓ Disponible en IMPI</span>';
+            } else if (status === 'OCUPADA') {
+                badgeHTML = '<span class="status-badge badge-ocupada">✗ Marca Ocupada</span>';
+            } else if (status === 'VERIFICAR_MANUAL') {
+                badgeHTML = '<span class="status-badge badge-verificar">⚠ Verificación Manual Requerida</span>';
+            } else {
+                badgeHTML = '<span class="status-badge badge-error">⚠ Error de Consulta</span>';
+            }
+            
+            document.getElementById('statusBadge').innerHTML = badgeHTML;
+
+            // Nota
+            document.getElementById('nota').textContent = data.nota || 'Sin información adicional';
+
+            // Clases
+            const clasesContainer = document.getElementById('clasesContainer');
+            const clasesList = document.getElementById('clasesList');
+            
+            if (data.clases && data.clases.length > 0) {
+                clasesContainer.style.display = 'block';
+                clasesList.innerHTML = data.clases.map(clase => `<li>${clase}</li>`).join('');
+            } else {
+                clasesContainer.style.display = 'none';
+            }
+
+            // Recomendaciones
+            const recomendacionesContainer = document.getElementById('recomendacionesContainer');
+            const recomendacionesList = document.getElementById('recomendacionesList');
+            
+            if (data.recomendaciones && data.recomendaciones.length > 0) {
+                recomendacionesContainer.style.display = 'block';
+                recomendacionesList.innerHTML = data.recomendaciones.map(rec => `<li>${rec}</li>`).join('');
+            } else {
+                recomendacionesContainer.style.display = 'none';
+            }
+
+            // Scroll suave al resultado
+            resultado.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    </script>
+</body>
+</html>
